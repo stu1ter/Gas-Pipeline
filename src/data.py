@@ -7,7 +7,6 @@ from PyQt6.QtCore import QAbstractTableModel, Qt
 from PyQt6.QtGui import QColor
 
 
-# Загружает CSV и приводит его к пригодному виду
 class DataLoader:
     REQUIRED_COLUMNS = [
         "Номер трубы", "Расстояние, м", "Глубина, %",
@@ -15,7 +14,6 @@ class DataLoader:
         "Характер особенности",
     ]
 
-    # Метод загрузки, провекри REQUIRED_COLUMNS и запуска _clean
     def load_and_clean(self, filepath: str) -> pd.DataFrame:
         if not Path(filepath).exists():
             raise FileNotFoundError(f"Файл не найден: {filepath}")
@@ -32,7 +30,6 @@ class DataLoader:
 
         return self._clean(df)
 
-    # Метод удаления некорректных значений и отчистки типов данных
     def _clean(self, df: pd.DataFrame) -> pd.DataFrame:
         for col in [c for c in df.columns if "ч:мин" in c]:
             df[col] = df[col].apply(self._fix_time)
@@ -59,7 +56,6 @@ class DataLoader:
 
         return df
 
-    # Исправление некорректоного времени
     @staticmethod
     def _fix_time(val):
         if pd.isna(val) or not isinstance(val, str):
@@ -73,58 +69,115 @@ class DataLoader:
             m %= 60
         return f"{h:02d}:{m:02d}"
 
-# Позволяет отображать DataFrame в таблице в PyQt
+
 class PandasModel(QAbstractTableModel):
     def __init__(self, data: pd.DataFrame):
         super().__init__()
         self._data = data
+        self._headers = list(data.columns)
+        self._cache_display = []
+        self._cache_fg = []
+        self._cache_bg = []
+        self._build_cache()
+
+    def _build_cache(self):
+        """Предрасчет отображаемых строк и цветов для мгновенной отрисовки."""
+        self._cache_display.clear()
+        self._cache_fg.clear()
+        self._cache_bg.clear()
+
+        for _, row in self._data.iterrows():
+            row_disp = []
+            row_fg = []
+            row_bg = []
+            for col, val in row.items():
+                # 1. Отображение
+                if pd.isna(val):
+                    row_disp.append("")
+                elif isinstance(val, float):
+                    row_disp.append(f"{val:.2f}")
+                else:
+                    row_disp.append(str(val))
+
+                # 2. Цвет текста (Foreground)
+                fg = None
+                if col == "Опасность":
+                    if val == "(a)": fg = QColor("#FF5252")
+                    elif val == "(b)": fg = QColor("#FFA726")
+                    elif val == "(c)": fg = QColor("#FFEB3B")
+                elif col == "Глубина, %" and pd.notna(val) and val >= 40.0:
+                    fg = QColor("#FF5252")
+                row_fg.append(fg)
+
+                # 3. Цвет фона (Background)
+                bg = None
+                if col == "Опасность" and val == "(a)":
+                    bg = QColor(255, 82, 82, 40)
+                row_bg.append(bg)
+
+            self._cache_display.append(row_disp)
+            self._cache_fg.append(row_fg)
+            self._cache_bg.append(row_bg)
 
     def rowCount(self, parent=None):
-        return self._data.shape[0]
+        return len(self._cache_display)
 
     def columnCount(self, parent=None):
-        return self._data.shape[1]
+        return len(self._headers)
 
-    # Возвращяет данные и стиль для каждой ячейки
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
 
-        val = self._data.iloc[index.row(), index.column()]
-        col_name = self._data.columns[index.column()]
+        r, c = index.row(), index.column()
 
         if role == Qt.ItemDataRole.DisplayRole:
-            if pd.isna(val):
-                return ""
-            if isinstance(val, float):
-                return f"{val:.2f}"
-            return str(val)
+            return self._cache_display[r][c]
 
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return int(Qt.AlignmentFlag.AlignCenter)
 
         if role == Qt.ItemDataRole.ForegroundRole:
-            if col_name == "Опасность":
-                if val == "(a)":
-                    return QColor("#FF5252")
-                if val == "(b)":
-                    return QColor("#FFA726")
-                if val == "(c)":
-                    return QColor("#FFEB3B")
-            if col_name == "Глубина, %" and pd.notna(val) and val >= 40.0:
-                return QColor("#FF5252")
+            return self._cache_fg[r][c]
 
         if role == Qt.ItemDataRole.BackgroundRole:
-            if col_name == "Опасность" and val == "(a)":
-                return QColor(255, 82, 82, 40)
+            return self._cache_bg[r][c]
 
         return None
 
-    # Задает названия колонок и нумерацию строк
     def headerData(self, section, orientation, role):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
-                return str(self._data.columns[section])
+                return self._headers[section]
             if orientation == Qt.Orientation.Vertical:
                 return str(self._data.index[section])
         return None
+
+    def sort(self, column, order):
+        """Встроенная сортировка."""
+        col_name = self._headers[column]
+        self.layoutAboutToBeChanged.emit()
+
+        self._data = self._data.sort_values(
+            by=col_name,
+            ascending=(order == Qt.SortOrder.AscendingOrder),
+            na_position="last",
+        ).reset_index(drop=True)
+
+        self._build_cache() # Пересчитываем кэш после сортировки
+        self.layoutChanged.emit()
+
+    def get_row_dict(self, row: int) -> dict:
+        if row < 0 or row >= self.rowCount():
+            return {}
+
+        row_data = self._data.iloc[row]
+        result = {}
+        for col, val in row_data.items():
+            if pd.isna(val):
+                result[col] = "Нет данных"
+            elif isinstance(val, float):
+                result[col] = f"{val:.2f}"
+            else:
+                result[col] = str(val)
+        return result

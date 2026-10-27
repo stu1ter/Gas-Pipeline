@@ -21,6 +21,7 @@ class ChartRenderer:
         self._draw_depth_hist(engine)
         self._draw_top_pipes(current_df)
 
+    # -- внутреннее -----------------------------------------------------
     def _theme(self, ax, title):
         ax.set_facecolor(self.DARK_BG)
         ax.figure.patch.set_facecolor(self.DARK_BG)
@@ -56,7 +57,6 @@ class ChartRenderer:
                     color=Palette.TEXT_DIM)
 
         self._theme(ax, "Типы дефектов")
-        fig.tight_layout()
 
     def _draw_depth_hist(self, engine):
         fig = self.fig_bar
@@ -75,7 +75,6 @@ class ChartRenderer:
                     color=Palette.TEXT_DIM)
 
         self._theme(ax, "Распределение глубин")
-        fig.tight_layout()
 
     def _draw_top_pipes(self, current_df: pd.DataFrame):
         fig = self.fig_top
@@ -110,4 +109,3 @@ class ChartRenderer:
                     color=Palette.TEXT_DIM)
 
         self._theme(ax, "Топ-10 проблемных труб")
-        fig.subplots_adjust(left=0.18, right=0.95, top=0.86, bottom=0.15)

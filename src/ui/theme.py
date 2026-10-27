@@ -1,3 +1,6 @@
+# Цветовая палитра и QSS-стили (сдержанный инженерный стиль).
+
+
 class Palette:
     BG = "#1e1e1e"
     PANEL = "#252525"
@@ -13,6 +16,10 @@ class Palette:
     KPI_RED = "#D9534F"
     KPI_PURPLE = "#8E7CC3"
 
+
+# ---------------------------------------------------------------------------
+# Стили
+# ---------------------------------------------------------------------------
 FILTER_PANEL_QSS = f"""
     QFrame#FilterPanel {{ background-color: transparent; }}
     QLabel#FieldLabel {{
@@ -90,8 +97,28 @@ TABLE_QSS = f"""
     }}
 """
 
+# Стиль для переключателя режима таблицы
+TABLE_MODE_QSS = f"""
+    QComboBox {{
+        background-color: {Palette.PANEL_ALT};
+        color: {Palette.TEXT};
+        border: 1px solid {Palette.BORDER};
+        border-radius: 4px;
+        padding: 4px 10px;
+        min-width: 170px;
+    }}
+    QComboBox:hover {{ border-color: {Palette.ACCENT}; }}
+    QComboBox::drop-down {{ border: none; width: 20px; }}
+    QComboBox QAbstractItemView {{
+        background-color: {Palette.PANEL_ALT};
+        color: {Palette.TEXT};
+        selection-background-color: {Palette.ACCENT};
+    }}
+"""
+
 
 def kpi_card_qss(accent: str) -> str:
+    """Стиль для KPI-карточки с заданным акцентом."""
     return f"""
         QFrame#KpiCard {{
             background-color: {Palette.PANEL};

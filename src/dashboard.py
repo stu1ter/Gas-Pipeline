@@ -5,6 +5,7 @@ from matplotlib.figure import Figure
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QFrame,
     QHBoxLayout,
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import (
 from analytics import AnalyticsEngine
 from data import PandasModel
 from ui.charts import ChartRenderer
+from ui.overlay import LoadingOverlay
 from ui.theme import (
     APPLY_BUTTON_QSS,
     EXTRA_GROUP_QSS,
@@ -47,6 +49,7 @@ class DashboardWindow(QMainWindow):
         self.full_df = full_df
         self.current_df = full_df.copy()
         self.engine = AnalyticsEngine(self.current_df)
+        self._is_updating = False
 
         self._init_ui()
         self._load_initial_filters()
@@ -62,6 +65,9 @@ class DashboardWindow(QMainWindow):
         root.addWidget(self._build_filters())
         root.addLayout(self._build_kpi_row())
         root.addWidget(self._build_splitter(), stretch=1)
+
+        # Оверлей создаём последним — чтобы был поверх всех виджетов
+        self._overlay = LoadingOverlay(central, "Загрузка данных…")
 
     def _build_filters(self) -> QFrame:
         panel = QFrame()
@@ -179,7 +185,9 @@ class DashboardWindow(QMainWindow):
 
         header_lay = QHBoxLayout()
         self.table_label = QLabel("Все аномалии")
-        self.table_label.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {Palette.TEXT};")
+        self.table_label.setStyleSheet(
+            f"font-size: 13px; font-weight: 600; color: {Palette.TEXT};"
+        )
         header_lay.addWidget(self.table_label)
         header_lay.addStretch()
 
@@ -196,10 +204,16 @@ class DashboardWindow(QMainWindow):
         self.table.setShowGrid(False)
         self.table.verticalHeader().setVisible(False)
         self.table.setSortingEnabled(True)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
 
-        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        self.table.verticalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Fixed
+        )
         self.table.verticalHeader().setDefaultSectionSize(32)
 
         header = self.table.horizontalHeader()
@@ -209,10 +223,10 @@ class DashboardWindow(QMainWindow):
         self.table.setStyleSheet(TABLE_QSS)
         table_lay.addWidget(self.table)
 
-        outer_lay.addWidget(table_container, stretch=4) # Увеличили пропорцию таблицы
+        outer_lay.addWidget(table_container, stretch=4)
 
         self.detail_card = DetailCard()
-        outer_lay.addWidget(self.detail_card, stretch=1) # Карточка занимает свою минимальную ширину
+        outer_lay.addWidget(self.detail_card, stretch=1)
 
         return w
 
@@ -229,7 +243,9 @@ class DashboardWindow(QMainWindow):
     def _on_region_changed(self):
         region = self.combo_region.currentText()
         df_region = self.full_df[self.full_df["Регион"] == region]
-        years = sorted(str(int(y)) for y in df_region["Год обследования"].dropna().unique())
+        years = sorted(
+            str(int(y)) for y in df_region["Год обследования"].dropna().unique()
+        )
 
         self.combo_year.blockSignals(True)
         self.combo_year.clear()
@@ -249,14 +265,41 @@ class DashboardWindow(QMainWindow):
 
         self.combo_haz.clear()
         self.combo_haz.addItem("Все", "Все")
-        valid = [h for h in df["Опасность"].dropna().unique() if h in ["(a)", "(b)", "(c)"]]
+        valid = [
+            h for h in df["Опасность"].dropna().unique()
+            if h in ["(a)", "(b)", "(c)"]
+        ]
         for haz in sorted(valid):
             self.combo_haz.addItem(haz, haz)
 
         self.combo_loc.blockSignals(False)
         self.combo_haz.blockSignals(False)
 
+    # ---------------------------------------------------------- обновление
     def update_dashboard(self):
+        """Показывает оверлей, даёт Qt отрисовать его, затем считает."""
+        if self._is_updating:
+            return
+        self._is_updating = True
+        self.btn_apply.setEnabled(False)
+
+        self._overlay.set_text("Загрузка данных…")
+        self._overlay.resize(self.centralWidget().size())
+        self._overlay.raise_()
+        self._overlay.show()
+
+        # Дать Qt отрисовать оверлей перед тяжёлым расчётом
+        QApplication.processEvents()
+
+        try:
+            self._perform_update()
+        finally:
+            self._overlay.hide()
+            self.btn_apply.setEnabled(True)
+            self._is_updating = False
+
+    def _perform_update(self):
+        """Тяжёлая часть: фильтрация, KPI, графики, таблица."""
         region = self.combo_region.currentText()
         year_str = self.combo_year.currentText()
         if not region or not year_str:
@@ -301,23 +344,31 @@ class DashboardWindow(QMainWindow):
                 pass
 
         if self.current_df.empty:
-            self.table.setModel(PandasModel(pd.DataFrame(columns=["Нет данных"])))
+            self.table.setModel(
+                PandasModel(pd.DataFrame(columns=["Нет данных"]))
+            )
             self.table_label.setText("Нет данных")
             self.detail_card.clear()
             return
 
-        visible_cols = ["Номер трубы", "Расстояние, м", "Глубина, %",
-                        "Характер особенности", "Расположение", "Опасность"]
+        visible_cols = [
+            "Номер трубы", "Расстояние, м", "Глубина, %",
+            "Характер особенности", "Расположение", "Опасность",
+        ]
         visible_cols = [c for c in visible_cols if c in self.current_df.columns]
 
         valid = self.current_df.dropna(subset=["Глубина, %", "Номер трубы"])
         if valid.empty:
-            self.table.setModel(PandasModel(pd.DataFrame(columns=["Нет данных"])))
+            self.table.setModel(
+                PandasModel(pd.DataFrame(columns=["Нет данных"]))
+            )
             self.table_label.setText("Нет данных")
             self.detail_card.clear()
             return
 
-        valid = valid.sort_values(by="Глубина, %", ascending=False).reset_index(drop=True)
+        valid = valid.sort_values(
+            by="Глубина, %", ascending=False
+        ).reset_index(drop=True)
         mode = self.mode_combo.currentIndex()
 
         if mode == 0:
@@ -345,11 +396,17 @@ class DashboardWindow(QMainWindow):
             last_idx = len(visible_cols) - 1
             for i in range(len(visible_cols)):
                 if i == last_idx:
-                    header.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
+                    header.setSectionResizeMode(
+                        i, QHeaderView.ResizeMode.Stretch
+                    )
                 else:
-                    header.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
+                    header.setSectionResizeMode(
+                        i, QHeaderView.ResizeMode.Interactive
+                    )
 
-        self.table.selectionModel().selectionChanged.connect(self._on_row_selected)
+        self.table.selectionModel().selectionChanged.connect(
+            self._on_row_selected
+        )
 
         if model.rowCount() > 0:
             self.table.selectRow(0)
@@ -369,3 +426,9 @@ class DashboardWindow(QMainWindow):
             self.detail_card.set_data(data)
         else:
             self.detail_card.clear()
+
+    # ------------------------------------------------------------- resize
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "_overlay") and self._overlay.isVisible():
+            self._overlay.resize(self.centralWidget().size())

@@ -1,8 +1,18 @@
+# type: ignore
+from typing import ClassVar
+
 import pandas as pd
 
 
 # Расчет ключевых показателей, подготовка данных для графиков и таблицы
 class AnalyticsEngine:
+
+    LOC_MAP: ClassVar[dict[str, str]] = {
+        "EXT": "Внешний (EXT)",
+        "INT": "Внутренний (INT)",
+        "MID": "В теле металла (MID)",
+    }
+
     def __init__(self, df: pd.DataFrame):
         self.df = df.copy()
 
@@ -21,8 +31,8 @@ class AnalyticsEngine:
 
         total = len(self.df)
 
-        avg_depth = self.df["Глубина, %"].mean()
-        max_depth = self.df["Глубина, %"].max()
+        avg_depth = float(self.df["Глубина, %"].mean())
+        max_depth = float(self.df["Глубина, %"].max())
 
         unique_defects = self.df["Характер особенности"].nunique()
 
@@ -46,21 +56,52 @@ class AnalyticsEngine:
         return self.df["Глубина, %"].dropna().tolist()
 
     # Подготовка данных для графика труб с наибольшим количеством дефектов
-    def get_top_pipes_data(self, top_n: int = 10) -> pd.Series:
-        if self.df.empty or "Номер трубы" not in self.df.columns:
-            return pd.Series(dtype=int)
+    def get_top_pipes_grouped(self, top_n: int = 10) -> pd.DataFrame:
+        cols = ["Регион", "Номер трубы", "count"]
+        if self.df.empty:
+            return pd.DataFrame(columns=cols)
 
-        pipe_counts = self.df["Номер трубы"].value_counts().head(top_n)
-        return pipe_counts
+        if "Номер трубы" not in self.df.columns or "Регион" not in self.df.columns:
+            return pd.DataFrame(columns=cols)
 
-    # Подготовка данных для таблицы труб самых опасных дефектов
-    def get_top_defects_table(self, top_n: int = 10) -> pd.DataFrame:
-        if self.df.empty or "Глубина, %" not in self.df.columns:
+        valid = self.df.dropna(subset=["Номер трубы", "Регион"])
+        if valid.empty:
+            return pd.DataFrame(columns=cols)
+
+        counts = (
+            valid.groupby(["Регион", "Номер трубы"])
+            .size()
+            .reset_index(name="count")
+        )
+
+        top_n_df = (
+            counts.sort_values(by="count", ascending=False)
+            .head(top_n)
+            .sort_values(by="count", ascending=True)
+            .reset_index(drop=True)
+        )
+        return top_n_df
+
+    # Подготовка данных для таблицы
+    def get_table_data(self, mode: int, top_n: int = 10) -> pd.DataFrame:
+        if self.df.empty:
             return pd.DataFrame()
 
-        cols_to_show = ["Номер трубы", "Расстояние, м", "Глубина, %", "Характер особенности", "Расположение", "Опасность"]
-        cols_to_show = [c for c in cols_to_show if c in self.df.columns]
+        base_df = self.df.sort_values(by="Глубина, %", ascending=False, na_position="last")
 
-        top_df = self.df.dropna(subset=["Глубина, %"]).sort_values(by="Глубина, %", ascending=False).head(top_n)
+        if mode == 0:
+            display = base_df.copy()
+        else:
+            valid = base_df.dropna(subset=["Глубина, %"])
+            if valid.empty:
+                return pd.DataFrame()
+            display = valid.head(top_n).copy()
 
-        return top_df[cols_to_show]
+        visible_cols = [
+            "Номер трубы", "Расстояние, м", "Глубина, %",
+            "Характер особенности", "Расположение", "Опасность",
+        ]
+        visible_cols = [c for c in visible_cols if c in display.columns]
+        other_cols = [c for c in display.columns if c not in visible_cols]
+
+        return display[visible_cols + other_cols].reset_index(drop=True)

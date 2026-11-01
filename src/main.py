@@ -14,12 +14,13 @@ from data import DataLoader
 def main() -> int:
     # Создание приложения
     app = QApplication(sys.argv)
-    csv_path = Path(__file__).parent.parent / "data" / "ВсеДанныеАномалий.csv"
+    # csv_path = Path(__file__).parent.parent / "data" / "ВсеДанныеАномалий.csv"
+    csv_path = Path(__file__).parent.parent / "data" / "НаборАномалий.csv"
 
     # Загрузка данных
     try:
         full_data = DataLoader().load_and_clean(str(csv_path))
-    except Exception as e:
+    except Exception as e: # noqa: BLE001
         QMessageBox.critical(None, "Ошибка загрузки данных", str(e))
         return 1
 

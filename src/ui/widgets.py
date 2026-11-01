@@ -1,17 +1,23 @@
-# Переиспользуемые виджеты: KPI-карточка, поле-фильтр, карточка деталей.
+# type: ignore
+from typing import ClassVar
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QFrame,
+    QHeaderView,
     QLabel,
     QScrollArea,
+    QTableView,
     QVBoxLayout,
     QWidget,
 )
 
-from .theme import Palette, kpi_card_qss
+from .theme import DETAIL_CARD_QSS, TABLE_QSS, Palette, kpi_card_qss
 
 
+# Виджет ключевого показателя
 class KpiCard(QFrame):
     def __init__(self, title: str, accent: str, parent=None):
         super().__init__(parent)
@@ -38,7 +44,7 @@ class KpiCard(QFrame):
     def set_value(self, value):
         self._value.setText(str(value))
 
-
+# Собирает пару подпись + комбо-бокс
 def make_filter_field(label: str, width: int) -> tuple[QComboBox, QWidget]:
     box = QVBoxLayout()
     box.setSpacing(2)
@@ -56,21 +62,18 @@ def make_filter_field(label: str, width: int) -> tuple[QComboBox, QWidget]:
     wrapper.setLayout(box)
     return combo, wrapper
 
-
+# Карточка с подробной информацией о выбранной аномалии
 class DetailCard(QFrame):
-    """Карточка с подробной информацией о выбранной аномалии."""
+    PRIORITY: ClassVar[list[str]] = [
+        "Номер трубы", "Регион", "Год обследования", "Расстояние, м",
+        "Характер особенности", "Глубина, %", "Толщина, мм",
+        "Расположение", "Опасность",
+    ]
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("DetailCard")
-        self.setStyleSheet(f"""
-            QFrame#DetailCard {{
-                background-color: {Palette.PANEL};
-                border: 1px solid {Palette.BORDER};
-                border-radius: 6px;
-            }}
-        """)
-        # Делаем карточку чуть шире для комфортного чтения
+        self.setStyleSheet(DETAIL_CARD_QSS)
         self.setMinimumWidth(340)
         self.setMaximumWidth(480)
 
@@ -84,64 +87,73 @@ class DetailCard(QFrame):
         )
         main_lay.addWidget(self._title)
 
-        # Область прокрутки для содержимого
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.scroll.setStyleSheet("background: transparent;")
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setStyleSheet("background: transparent;")
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         self.scroll_content = QWidget()
         self.scroll_content.setStyleSheet("background: transparent;")
 
-        # Используем QVBoxLayout вместо QFormLayout, чтобы избежать наложения текста
         self.content_layout = QVBoxLayout(self.scroll_content)
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         self.content_layout.setSpacing(10)
 
-        self.scroll.setWidget(self.scroll_content)
-        main_lay.addWidget(self.scroll)
+        self.scroll_area.setWidget(self.scroll_content)
+        main_lay.addWidget(self.scroll_area)
 
         self.clear()
 
+    #Полностью очищает layout
     def _clear_content(self):
-        """Полностью очищает layout."""
         while self.content_layout.count():
             item = self.content_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            if item is not None:
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
 
+    # Очищает карточку и показывает заглушку
     def clear(self):
-        """Очищает карточку и показывает заглушку."""
         self._clear_content()
+        self._title.setText("Детали аномалии")
         placeholder = QLabel("Выберите строку в таблице")
         placeholder.setStyleSheet(f"color: {Palette.TEXT_DIM}; font-size: 13px;")
         placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.content_layout.addWidget(placeholder)
 
+    # Заполняет карточку данными из словаря с приоритетом полей
     def set_data(self, data: dict):
-        """Заполняет карточку данными из словаря (вертикальный список)."""
         self._clear_content()
         if not data:
             self.clear()
             return
 
-        for key, val in data.items():
-            # Контейнер для одной пары (Ключ + Значение)
+        pipe = data.get("Номер трубы")
+        if pipe and pipe != "Нет данных":
+            self._title.setText(f"Аномалия — Труба {pipe}")
+        else:
+            self._title.setText("Детали аномалии")
+
+        ordered_keys = [k for k in self.PRIORITY if k in data]
+        other_keys = [k for k in data if k not in self.PRIORITY]
+
+        for key in ordered_keys + other_keys:
+            val = data[key]
+
             row_widget = QWidget()
             row_lay = QVBoxLayout(row_widget)
             row_lay.setContentsMargins(0, 4, 0, 4)
             row_lay.setSpacing(2)
 
-            # Заголовок поля (мелкий, серый, капсом для стиля)
             lbl_key = QLabel(key.upper())
             lbl_key.setStyleSheet(
                 f"color: {Palette.TEXT_DIM}; font-size: 10px; font-weight: 600; letter-spacing: 0.5px;"
             )
             lbl_key.setWordWrap(True)
 
-            # Значение (крупное, белое)
             lbl_val = QLabel(str(val))
             lbl_val.setWordWrap(True)
 
@@ -157,10 +169,30 @@ class DetailCard(QFrame):
             row_lay.addWidget(lbl_key)
             row_lay.addWidget(lbl_val)
 
-            # Тонкий разделитель
             sep = QFrame()
             sep.setFrameShape(QFrame.Shape.HLine)
             sep.setStyleSheet(f"color: {Palette.BORDER}; background-color: {Palette.BORDER}; max-height: 1px;")
             row_lay.addWidget(sep)
 
             self.content_layout.addWidget(row_widget)
+
+# Виджет таблицы данных
+#
+class DataTable(QTableView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAlternatingRowColors(True)
+        self.setShowGrid(False)
+        self.verticalHeader().setVisible(False)
+        self.setSortingEnabled(True)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+
+        self.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        self.verticalHeader().setDefaultSectionSize(32)
+
+        header = self.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setStretchLastSection(False)
+
+        self.setStyleSheet(TABLE_QSS)

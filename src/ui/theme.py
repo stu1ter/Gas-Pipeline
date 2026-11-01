@@ -1,6 +1,4 @@
-# Цветовая палитра и QSS-стили (сдержанный инженерный стиль).
-
-
+# Цветовая палитра и QSS-стили.
 class Palette:
     BG = "#1e1e1e"
     PANEL = "#252525"
@@ -16,10 +14,7 @@ class Palette:
     KPI_RED = "#D9534F"
     KPI_PURPLE = "#8E7CC3"
 
-
-# ---------------------------------------------------------------------------
-# Стили
-# ---------------------------------------------------------------------------
+# Стиль панели фильтров
 FILTER_PANEL_QSS = f"""
     QFrame#FilterPanel {{ background-color: transparent; }}
     QLabel#FieldLabel {{
@@ -48,6 +43,7 @@ FILTER_PANEL_QSS = f"""
     }}
 """
 
+# Стиль блока дополнительных фильтров
 EXTRA_GROUP_QSS = f"""
     QFrame#ExtraGroup {{
         background-color: {Palette.PANEL};
@@ -56,6 +52,7 @@ EXTRA_GROUP_QSS = f"""
     }}
 """
 
+# Стиль кнопки «Применить фильтры»
 APPLY_BUTTON_QSS = f"""
     QPushButton {{
         background-color: {Palette.ACCENT};
@@ -69,6 +66,7 @@ APPLY_BUTTON_QSS = f"""
     QPushButton:hover {{ background-color: {Palette.ACCENT_HOVER}; }}
 """
 
+# Стиль таблицы
 TABLE_QSS = f"""
     QTableView {{
         background-color: {Palette.PANEL};
@@ -116,9 +114,8 @@ TABLE_MODE_QSS = f"""
     }}
 """
 
-
+# Стиль для KPI-карточки с заданным акцентом
 def kpi_card_qss(accent: str) -> str:
-    """Стиль для KPI-карточки с заданным акцентом."""
     return f"""
         QFrame#KpiCard {{
             background-color: {Palette.PANEL};
@@ -128,3 +125,27 @@ def kpi_card_qss(accent: str) -> str:
         }}
         QLabel {{ border: none; background: transparent; }}
     """
+
+DETAIL_CARD_QSS = f"""
+    QFrame#DetailCard {{
+        background-color: {Palette.PANEL};
+        border: 1px solid {Palette.BORDER};
+        border-radius: 6px;
+    }}
+"""
+
+OVERLAY_QSS = """
+    LoadingOverlay {
+        background-color: rgba(20, 20, 20, 180);
+    }
+"""
+
+OVERLAY_LABEL_QSS = f"""
+    QLabel {{
+        font-size: 16px; font-weight: 600;
+        color: {Palette.TEXT};
+        padding: 24px 40px;
+        border-radius: 8px;
+        background-color: {Palette.PANEL};
+    }}
+"""

@@ -62,13 +62,17 @@ class DashboardWindow(QMainWindow):
         panel.setObjectName("FilterPanel")
         panel.setStyleSheet(FILTER_PANEL_QSS)
 
-        outer = QHBoxLayout(panel)
+        outer = QVBoxLayout(panel)
         outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(16)
+        outer.setSpacing(8)
 
-        outer.addWidget(self._build_main_group())
-        outer.addWidget(self._build_extra_group())
-        outer.addStretch()
+        filters_row = QHBoxLayout()
+        filters_row.setSpacing(16)
+        filters_row.addWidget(self._build_main_group())
+        filters_row.addWidget(self._build_extra_group())
+        filters_row.addStretch()
+
+        outer.addLayout(filters_row)
         outer.addLayout(self._build_apply_button())
 
         return panel
@@ -115,10 +119,13 @@ class DashboardWindow(QMainWindow):
         self.btn_apply = QPushButton("Применить фильтры")
         self.btn_apply.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_apply.setFixedHeight(34)
+        self.btn_apply.setMaximumWidth(200)
         self.btn_apply.setStyleSheet(APPLY_BUTTON_QSS)
         self.btn_apply.clicked.connect(self.update_dashboard)
 
         btn_box.addWidget(self.btn_apply)
+        btn_box.addStretch()
+
         return btn_box
 
     # Панель с ключевыми показателями
@@ -126,10 +133,10 @@ class DashboardWindow(QMainWindow):
         row = QHBoxLayout()
         row.setSpacing(12)
         self.kpi_total = KpiCard("Всего дефектов", Palette.KPI_BLUE)
-        self.kpi_avg = KpiCard("Средняя глубина", Palette.KPI_ORANGE)
+        self.kpi_replacement = KpiCard("Требуют замены", Palette.KPI_ORANGE)
         self.kpi_max = KpiCard("Макс. глубина", Palette.KPI_RED)
         self.kpi_unique = KpiCard("Уникальных типов", Palette.KPI_PURPLE)
-        for card in (self.kpi_total, self.kpi_avg,
+        for card in (self.kpi_total, self.kpi_replacement,
                      self.kpi_max, self.kpi_unique):
             row.addWidget(card)
         return row
@@ -171,15 +178,34 @@ class DashboardWindow(QMainWindow):
         table_lay.setSpacing(8)
 
         header_lay = QHBoxLayout()
-        self.table_label = QLabel("Все аномалии")
-        self.table_label.setStyleSheet(
-            f"font-size: 13px; font-weight: 600; color: {Palette.TEXT};"
-        )
-        header_lay.addWidget(self.table_label)
+
+        # 1. Заменили QLabel на QPushButton
+        self.btn_reset_sort = QPushButton("Сортировка по умолчанию")
+        self.btn_reset_sort.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reset_sort.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Palette.PANEL_ALT};
+                color: {Palette.TEXT};
+                border: 1px solid {Palette.BORDER};
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                border-color: {Palette.ACCENT};
+            }}
+        """)
+        self.btn_reset_sort.clicked.connect(self._reset_sorting)
+        header_lay.addWidget(self.btn_reset_sort)
+
         header_lay.addStretch()
 
+        self.combo_label = QLabel("Выберите таблицу:")
+        self.combo_label.setStyleSheet(f"font-size: 12px; color: {Palette.TEXT_DIM};")
+        header_lay.addWidget(self.combo_label)
+
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Все аномалии", "Топ-10 по глубине"])
+        self.mode_combo.addItems(["Все аномалии", "Сводка по трубам"])
         self.mode_combo.setStyleSheet(TABLE_MODE_QSS)
         self.mode_combo.currentIndexChanged.connect(self._refresh_table)
         header_lay.addWidget(self.mode_combo)
@@ -299,9 +325,18 @@ class DashboardWindow(QMainWindow):
     def _refresh_kpi(self):
         k = self.engine.get_kpis()
         self.kpi_total.set_value(k["total"])
-        self.kpi_avg.set_value(f"{k['avg_depth']} %")
+        self.kpi_replacement.set_value(k["pipes_replacement"])
         self.kpi_max.set_value(f"{k['max_depth']} %")
         self.kpi_unique.set_value(k["unique_defects"])
+
+    # Сброс сортировки таблицы к исходному порядку
+    def _reset_sorting(self):
+        if hasattr(self, 'proxy_model') and self.proxy_model is not None:
+
+            self.proxy_model.sort(-1)
+
+            if self.proxy_model.rowCount() > 0:
+                self.table.selectRow(0)
 
     # Обновление таблицы
     def _refresh_table(self, _=None):
@@ -313,15 +348,17 @@ class DashboardWindow(QMainWindow):
                 pass
 
         mode = self.mode_combo.currentIndex()
-        display = self.engine.get_table_data(mode=mode, top_n=10)
+        if mode == 0:
+            display = self.engine.get_table_data(mode=0)
+            visible_cols_count = 6
+        else:
+            display = self.engine.get_table_data(mode=1)
+            visible_cols_count = 5
 
         if display.empty:
             self.table.setModel(PandasModel(pd.DataFrame(columns=["Нет данных"])))
-            self.table_label.setText("Нет данных")
             self.detail_card.clear()
             return
-
-        self.table_label.setText("Все аномалии" if mode == 0 else "Топ-10 по глубине")
 
         source_model = PandasModel(display)
         self.proxy_model = QSortFilterProxyModel(self)
@@ -330,23 +367,15 @@ class DashboardWindow(QMainWindow):
 
         self.table.setModel(self.proxy_model)
 
-        visible_cols_count = 6
-        for i in range(visible_cols_count, len(display.columns)):
-            self.table.setColumnHidden(i, True)
+        for i in range(len(display.columns)):
+            self.table.setColumnHidden(i, i >= visible_cols_count)
 
         self.table.resizeColumnsToContents()
 
         header = self.table.horizontalHeader()
         if header is not None:
             header.setStretchLastSection(False)
-
-            if visible_cols_count > 0:
-                last_idx = visible_cols_count - 1
-                for i in range(visible_cols_count):
-                    if i == last_idx:
-                        header.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
-                    else:
-                        header.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
+            header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
         new_selection_model = self.table.selectionModel()
         if new_selection_model is not None:
@@ -369,8 +398,16 @@ class DashboardWindow(QMainWindow):
         row = source_index.row()
         model = self.proxy_model.sourceModel()
 
-        if hasattr(model, 'get_row_dict'):
-            data = model.get_row_dict(row)
+        if isinstance(model, PandasModel):
+            data = model.get_row_dict(row) #type:ignore
+
+            if self.mode_combo.currentIndex() == 1:
+                pipe_num = data.get("Номер трубы")
+                if pipe_num and pipe_num != "Нет данных":
+                    pipe_data = self.engine.get_pipe_details(str(pipe_num))
+                    if pipe_data:
+                        self.detail_card.set_data(pipe_data)
+                        return
             self.detail_card.set_data(data)
         else:
             self.detail_card.clear()

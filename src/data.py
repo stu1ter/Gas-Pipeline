@@ -179,11 +179,14 @@ class PandasModel(QAbstractTableModel):
             if col == "Глубина, %":
                 return f"{val:.1f}"
 
+            if float(val).is_integer():
+                return str(int(float(val)))
+
             return f"{val:.2f}"
 
         return str(val)
 
-    #Предварительно формирует отображаемые значения и цвета ячеек для ускорения работы таблицы.
+    # Предварительно формирует отображаемые значения и цвета ячеек для ускорения работы таблицы.
     def _build_cache(self):
         self._cache_display.clear()
         self._cache_fg.clear()

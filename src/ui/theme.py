@@ -72,7 +72,7 @@ TABLE_QSS = f"""
         background-color: {Palette.PANEL};
         alternate-background-color: {Palette.PANEL_ALT};
         color: {Palette.TEXT};
-        selection-background-color: {Palette.ACCENT};
+        selection-background-color: #555555;
         selection-color: white;
         border: 1px solid {Palette.BORDER};
         border-radius: 6px;

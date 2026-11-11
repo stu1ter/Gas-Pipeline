@@ -1,4 +1,3 @@
-# ui/charts.py
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -30,8 +29,8 @@ class ChartRenderer:
     # Перерисовывает все графики на основе новых данных
     def redraw_all(self, engine, current_df: pd.DataFrame):
         self._draw_defect_types(engine)
-        self._draw_depth_hist(engine)
-        self._draw_top_pipes(engine)
+        self._draw_danger_classes(engine)
+        self._draw_distance_concentration(engine)
 
         # Обновляем отрисовку канвасов
         self.canvas_pie.draw_idle()
@@ -76,45 +75,69 @@ class ChartRenderer:
 
         self._theme(ax, "Типы дефектов")
 
-    # Отрисовка гистрограммы
-    def _draw_depth_hist(self, engine):
+    # Отрисовка горизонтальной диаграммы классов опасности
+    def _draw_danger_classes(self, engine):
         fig = self.fig_bar
         fig.clear()
         ax = fig.add_subplot(111)
 
-        depths = engine.get_depth_histogram_data()
-        if depths:
-            ax.hist(depths, bins=20, color=Palette.KPI_RED,
-                    edgecolor=Palette.BG)
-            ax.set_xlabel("Глубина, %", fontsize=8)
-            ax.set_ylabel("Кол-во", fontsize=8)
+        data = engine.get_danger_classes_data()
+
+        labels = []
+        values = []
+        colors = []
+
+        class_info = [
+            ("(a)", data["(a)"], "#FF5252"),
+            ("(b)", data["(b)"], "#FFA726"),
+            ("(c)", data["(c)"], "#FFEB3B"),
+        ]
+
+        for label, val, color in class_info:
+            if val > 0:
+                labels.append(label)
+                values.append(val)
+                colors.append(color)
+
+        if values:
+            bars = ax.barh(labels, values, color=colors, edgecolor=Palette.BG, height=0.6)
+            ax.invert_yaxis()
+
+            for bar in bars:
+                w = bar.get_width()
+                ax.text(w + max(values)*0.02, bar.get_y() + bar.get_height() / 2,
+                        f"{int(w)}", va="center", ha="left", fontsize=9,
+                        color=Palette.TEXT, fontweight="bold")
+
+
+            ax.set_xlim(0, max(values) * 1.15)
+            ax.set_xlabel("Кол-во дефектов", fontsize=8)
+
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+
+            ax.grid(axis="x", alpha=0.15, color=Palette.TEXT)
+            ax.set_axisbelow(True)
+        else:
+            ax.text(0.5, 0.5, "Нет данных", ha="center", va="center", color=Palette.TEXT_DIM)
+            ax.set_yticks([])
+
+        self._theme(ax, "Распределение по классам")
+
+    def _draw_distance_concentration(self, engine):
+        fig = self.fig_top
+        fig.clear()
+        ax = fig.add_subplot(111)
+
+        distances = engine.get_distance_chart_data()
+
+        if distances:
+            ax.hist(distances, bins=30, color=Palette.KPI_PURPLE, edgecolor=Palette.BG)
+            ax.set_xlabel("Расстояние, м", fontsize=8)
+            ax.set_ylabel("Кол-во дефектов", fontsize=8)
             ax.grid(axis="y", alpha=0.15, color=Palette.TEXT)
         else:
             ax.text(0.5, 0.5, "Нет данных", ha="center", va="center",
                     color=Palette.TEXT_DIM)
 
-        self._theme(ax, "Распределение глубин")
-
-    # Отрисовка бар-чарта
-    def _draw_top_pipes(self, engine):
-        fig = self.fig_top
-        fig.clear()
-        ax = fig.add_subplot(111)
-
-        top_n_df = engine.get_top_pipes_grouped()
-
-        if not top_n_df.empty:
-            labels = top_n_df["Номер трубы"].astype(str).tolist()
-            values = top_n_df["count"].tolist()
-            colors = plt.cm.Blues(np.linspace(0.45, 0.85, len(top_n_df)))
-            bars = ax.barh(labels, values, color=colors, edgecolor=Palette.BG)
-            ax.set_xlabel("Кол-во дефектов", fontsize=8)
-            for bar in bars:
-                w = bar.get_width()
-                ax.text(w, bar.get_y() + bar.get_height() / 2, f" {int(w)}",
-                        va="center", ha="left", fontsize=7, color=Palette.TEXT)
-        else:
-            ax.text(0.5, 0.5, "Нет данных", ha="center", va="center",
-                    color=Palette.TEXT_DIM)
-
-        self._theme(ax, "Топ-10 проблемных труб")
+        self._theme(ax, "Концентрация по расстоянию")

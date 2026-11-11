@@ -208,12 +208,19 @@ class PandasModel(QAbstractTableModel):
                 fg = None
 
                 if col == "Опасность":
-                    if val == "(a)":
+                    if pd.notna(val) and val == "(a)":
                         fg = QColor("#FF5252")
-                    elif val == "(b)":
+                    elif pd.notna(val) and val == "(b)":
                         fg = QColor("#FFA726")
-                    elif val == "(c)":
+                    elif pd.notna(val) and val == "(c)":
                         fg = QColor("#FFEB3B")
+
+                elif col == "Класс (a)" and pd.notna(val) and val > 0:
+                    fg = QColor("#FF5252")
+                elif col == "Класс (b)" and pd.notna(val) and val > 0:
+                    fg = QColor("#FFA726")
+                elif col == "Класс (c)" and pd.notna(val) and val > 0:
+                    fg = QColor("#FFEB3B")
 
                 elif (
                     col == "Глубина, %"
@@ -227,7 +234,7 @@ class PandasModel(QAbstractTableModel):
                 # Цвет фона
                 bg = None
 
-                if col == "Опасность" and val == "(a)":
+                if col == "Опасность" and pd.notna(val) and val == "(a)":
                     bg = QColor(255, 82, 82, 40)
 
                 row_background.append(bg)

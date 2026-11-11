@@ -186,7 +186,7 @@ class DataTable(QTableView):
         self.setShowGrid(False)
         self.verticalHeader().setVisible(False)
         self.setSortingEnabled(True)
-        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
 
         self.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)

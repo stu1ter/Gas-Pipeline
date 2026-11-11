@@ -55,36 +55,26 @@ class AnalyticsEngine:
         counts = self.df["Характер особенности"].value_counts()
         return counts
 
-    # Подготовка данных для гистограммы
-    def get_depth_histogram_data(self) -> list:
-        return self.df["Глубина, %"].dropna().tolist()
+    # Подготовка данных для диаграммы классов опасности
+    def get_danger_classes_data(self) -> dict:
+        if self.df.empty or "Опасность" not in self.df.columns:
+            return {"(a)": 0, "(b)": 0, "(c)": 0}
 
-    # Подготовка данных для графика труб с наибольшим количеством дефектов
-    def get_top_pipes_grouped(self, top_n: int = 10) -> pd.DataFrame:
-        cols = ["Регион", "Номер трубы", "count"]
-        if self.df.empty:
-            return pd.DataFrame(columns=cols)
+        counts = self.df["Опасность"].value_counts()
 
-        if "Номер трубы" not in self.df.columns or "Регион" not in self.df.columns:
-            return pd.DataFrame(columns=cols)
+        return {
+            "(a)": int(counts.get("(a)", 0)),
+            "(b)": int(counts.get("(b)", 0)),
+            "(c)": int(counts.get("(c)", 0))
+        }
 
-        valid = self.df.dropna(subset=["Номер трубы", "Регион"])
-        if valid.empty:
-            return pd.DataFrame(columns=cols)
+    # Подготовка данных для графика концентрации по расстоянию
+    def get_distance_chart_data(self) -> list:
+        if self.df.empty or "Расстояние, м" not in self.df.columns:
+            return []
 
-        counts = (
-            valid.groupby(["Регион", "Номер трубы"])
-            .size()
-            .reset_index(name="count")
-        )
-
-        top_n_df = (
-            counts.sort_values(by="count", ascending=False)
-            .head(top_n)
-            .sort_values(by="count", ascending=True)
-            .reset_index(drop=True)
-        )
-        return top_n_df
+        # Берем только валидные числовые значения и переводим в список
+        return self.df["Расстояние, м"].dropna().tolist()
 
     # Подготовка данных для таблицы
     def get_table_data(self, mode: int) -> pd.DataFrame:
@@ -120,14 +110,12 @@ class AnalyticsEngine:
                 "count_c": "Класс (c)"
             }, inplace=True)
 
-            grouped["_priority"] = grouped.apply(
-                lambda r: 3 if r["Класс (a)"] > 0 else (2 if r["Класс (b)"] > 0 else (1 if r["Класс (c)"] > 0 else 0)),
-                axis=1
+            grouped = grouped.sort_values(
+                by=["Класс (a)", "Класс (b)", "Класс (c)", "Кол-во дефектов"],
+                ascending=[False, False, False, False]
             )
 
-            # Сортировка: сначала по приоритету, затем по общему числу дефектов
-            grouped = grouped.sort_values(by=["_priority", "Кол-во дефектов"], ascending=[False, False])
-            return grouped.drop(columns=["_priority"]).reset_index(drop=True)
+            return grouped.reset_index(drop=True)
 
     # Получение общей информации по конкретной трубе
     def get_pipe_details(self, pipe_number: str) -> dict:

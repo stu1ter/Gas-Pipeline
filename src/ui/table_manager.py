@@ -1,4 +1,4 @@
-from PyQt6.QtCore import QSortFilterProxyModel, Qt
+from PyQt6.QtCore import QObject, QSortFilterProxyModel, Qt
 from PyQt6.QtWidgets import QTabBar, QTabWidget, QVBoxLayout, QWidget
 
 from analytics import AnalyticsEngine
@@ -7,8 +7,11 @@ from ui.widgets import DataTable, TabCloseButton
 
 
 # Управляет вкладками, таблицами и их моделями данных
-class TableManager:
+class TableManager(QObject):  # <-- Наследуемся от QObject
     def __init__(self, tab_widget: QTabWidget, detail_card):
+        # Инициализируем QObject, передавая ему tab_widget как родителя
+        super().__init__(tab_widget)
+
         self.tabs = tab_widget
         self.detail_card = detail_card
         self.engine = None
@@ -172,7 +175,7 @@ class TableManager:
 
         new_index = self.tabs.count() - 1
         close_btn = TabCloseButton()
-        close_btn.clicked.connect(lambda: self.close_tab(new_index))
+        close_btn.clicked.connect(self._on_close_tab_clicked)
 
         tab_bar = self.tabs.tabBar()
         if tab_bar is not None:
@@ -181,6 +184,16 @@ class TableManager:
             )
 
         self.tabs.setCurrentIndex(new_index)
+
+    # Определяет вкладку по нажатой кнопке и закрывает её
+    def _on_close_tab_clicked(self):
+        btn = self.sender()
+        tab_bar = self.tabs.tabBar()
+        if btn and tab_bar:
+            for i in range(self.tabs.count()):
+                if tab_bar.tabButton(i, QTabBar.ButtonPosition.RightSide) == btn:
+                    self.close_tab(i)
+                    break
 
     # Обработчик выбора строки в кастомной таблице
     def _on_custom_row_selected(self, selected, proxy_model):

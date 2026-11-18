@@ -7,9 +7,8 @@ from ui.widgets import DataTable, TabCloseButton
 
 
 # Управляет вкладками, таблицами и их моделями данных
-class TableManager(QObject):  # <-- Наследуемся от QObject
+class TableManager(QObject):
     def __init__(self, tab_widget: QTabWidget, detail_card):
-        # Инициализируем QObject, передавая ему tab_widget как родителя
         super().__init__(tab_widget)
 
         self.tabs = tab_widget
@@ -35,7 +34,11 @@ class TableManager(QObject):  # <-- Наследуемся от QObject
         tab_bar = self.tabs.tabBar()
         if tab_bar is not None:
             for i in range(2):
-                tab_bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
+                spacer = QWidget()
+                spacer.setFixedSize(18, 18)
+                spacer.setStyleSheet("background: transparent;")
+                spacer.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+                tab_bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, spacer)
 
     # Создает контейнер с таблицей
     def _create_table_widget(self) -> tuple[QWidget, DataTable]:
@@ -52,6 +55,26 @@ class TableManager(QObject):  # <-- Наследуемся от QObject
         self.engine = engine
         self._setup_base_table(0, self.table_all, 'proxy_all', 'source_all')
         self._setup_base_table(1, self.table_summary, 'proxy_summary', 'source_summary')
+
+    # Создает модель, прокси и настраивает таблицу
+    def _make_table(self, display: pd.DataFrame, visible_cols: int) -> tuple[DataTable, QSortFilterProxyModel, PandasModel]:
+        table = DataTable()
+        source_model = PandasModel(display)
+        proxy_model = QSortFilterProxyModel(self.tabs)
+        proxy_model.setSourceModel(source_model)
+        proxy_model.setSortRole(Qt.ItemDataRole.UserRole)
+        table.setModel(proxy_model)
+
+        for i in range(len(display.columns)):
+            table.setColumnHidden(i, i >= visible_cols)
+
+        table.resizeColumnsToContents()
+        header = table.horizontalHeader()
+        if header:
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(header.ResizeMode.Stretch)
+
+        return table, proxy_model, source_model
 
     # Настраивает конкретную базовую таблицу
     def _setup_base_table(self, mode: int, table: DataTable, proxy_attr: str, source_attr: str):
@@ -124,7 +147,7 @@ class TableManager(QObject):  # <-- Наследуемся от QObject
             self.detail_card.set_data(data)
 
     # Создает новую вкладку с отфильтрованными данными
-    def create_filtered_tab(self, tab_name: str, filtered_df, engine: AnalyticsEngine):
+    def create_filtered_tab(self, tab_name: str, filtered_df, engine: AnalyticsEngine = None):
         for i in range(self.tabs.count()):
             if self.tabs.tabText(i) == tab_name:
                 self.tabs.setCurrentIndex(i)
@@ -139,22 +162,12 @@ class TableManager(QObject):  # <-- Наследуемся от QObject
         if display.empty:
             return
 
-        tab_widget, table = self._create_table_widget()
-        source_model = PandasModel(display)
-        proxy_model = QSortFilterProxyModel(self.tabs)
-        proxy_model.setSourceModel(source_model)
-        proxy_model.setSortRole(Qt.ItemDataRole.UserRole)
+        tab_widget, _ = self._create_table_widget()
+        table, proxy_model, source_model = self._make_table(display, visible_cols=6)
 
-        table.setModel(proxy_model)
-
-        for i in range(len(display.columns)):
-            table.setColumnHidden(i, i >= 6)
-
-        table.resizeColumnsToContents()
-        header = table.horizontalHeader()
-        if header:
-            header.setStretchLastSection(False)
-            header.setSectionResizeMode(header.ResizeMode.Stretch)
+        lay = tab_widget.layout()
+        if lay is not None:
+            lay.addWidget(table)
 
         sel_model = table.selectionModel()
         if sel_model is not None:
@@ -237,3 +250,31 @@ class TableManager(QObject):  # <-- Наследуемся от QObject
             proxy.sort(-1)
             if proxy.rowCount() > 0:
                 table.selectRow(0)
+
+    # Публичный метод для обновления карточки деталей при смене вкладки
+    def refresh_detail_for_tab(self, index: int):
+        if index == 0:
+            table, proxy, mode = self.table_all, self.proxy_all, 0
+        elif index == 1:
+            table, proxy, mode = self.table_summary, self.proxy_summary, 1
+        else:
+            custom_idx = index - 2
+            if custom_idx < len(self.custom_tables):
+                tab_data = self.custom_tables[custom_idx]
+                table, proxy = tab_data['table'], tab_data['proxy']
+                mode = -1  # Специальный маркер для кастомных вкладок
+            else:
+                return
+
+        if proxy is None:
+            self.detail_card.clear()
+            return
+
+        sel_model = table.selectionModel()
+        if sel_model is not None and sel_model.hasSelection():
+            if mode == -1:
+                self._on_custom_row_selected(sel_model.selection(), proxy)
+            else:
+                self._on_row_selected(sel_model.selection(), proxy, mode=mode)
+        else:
+            self.detail_card.clear()

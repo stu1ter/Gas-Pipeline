@@ -188,8 +188,6 @@ class DashboardWindow(QMainWindow):
             tab_bar.installEventFilter(self)
         self.table_tabs.currentChanged.connect(self._on_tab_changed)
 
-        self.table_tabs.currentChanged.connect(self._on_tab_changed)
-
         self.btn_reset_sort = QPushButton("Сортировка по умолчанию")
         self.btn_reset_sort.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_reset_sort.setStyleSheet(SORT_BUTTON_QSS)
@@ -307,6 +305,15 @@ class DashboardWindow(QMainWindow):
         self.kpi_max.set_value(f"{k['max_depth']} %")
         self.kpi_unique.set_value(k["unique_defects"])
 
+    # Ресайзим оверлей при изменении размера главного окна
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        central = self.centralWidget()
+        if central and hasattr(self, '_overlay') and self._overlay:
+            self._overlay.setGeometry(central.rect())
+            self._overlay.raise_()
+
     # Обрабатывает клик средней кнопкой мыши по вкладкам
     def eventFilter(self, obj, event):
         tab_bar = self.table_tabs.tabBar()
@@ -324,51 +331,17 @@ class DashboardWindow(QMainWindow):
 
     # Обновляет карточку деталей при переключении вкладок
     def _on_tab_changed(self, index):
-        if index == 0:
-            table = self.table_manager.table_all
-            proxy = self.table_manager.proxy_all
-            sel_model = table.selectionModel()
-            if sel_model is not None and sel_model.hasSelection():
-                self.table_manager._on_row_selected(
-                    sel_model.selection(), proxy, mode=0
-                )
-            else:
-                self.detail_card.clear()
-
-        elif index == 1:
-            table = self.table_manager.table_summary
-            proxy = self.table_manager.proxy_summary
-            sel_model = table.selectionModel()
-            if sel_model is not None and sel_model.hasSelection():
-                self.table_manager._on_row_selected(
-                    sel_model.selection(), proxy, mode=1
-                )
-            else:
-                self.detail_card.clear()
-
-        else:
-            custom_idx = index - 2
-            if custom_idx < len(self.table_manager.custom_tables):
-                tab_data = self.table_manager.custom_tables[custom_idx]
-                table = tab_data['table']
-                proxy = tab_data['proxy']
-                sel_model = table.selectionModel()
-                if sel_model is not None and sel_model.hasSelection():
-                    self.table_manager._on_custom_row_selected(
-                        sel_model.selection(), proxy
-                    )
-                else:
-                    self.detail_card.clear()
+        self.table_manager.refresh_detail_for_tab(index)
 
     # Создает вкладку с отфильтрованными данными по типу дефекта
     def _on_chart_defect_clicked(self, label):
         if label == "Другие":
             return
         filtered_df = self.current_df[self.current_df["Характер особенности"] == label]
-        self.table_manager.create_filtered_tab(label, filtered_df, self.engine)
+        self.table_manager.create_filtered_tab(label, filtered_df)
 
     # Создает вкладку с отфильтрованными данными по классу опасности
     def _on_chart_class_clicked(self, label):
         tab_name = f"Класс {label}"
         filtered_df = self.current_df[self.current_df["Опасность"] == label]
-        self.table_manager.create_filtered_tab(tab_name, filtered_df, self.engine)
+        self.table_manager.create_filtered_tab(tab_name, filtered_df)

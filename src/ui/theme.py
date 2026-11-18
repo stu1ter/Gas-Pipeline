@@ -182,22 +182,6 @@ TAB_WIDGET_QSS = f"""
     }}
 """
 
-# Стиль для кнопки закрытия вкладки
-CLOSE_BUTTON_QSS = """
-    QPushButton {
-        background: transparent;
-        border: none;
-        border-radius: 4px;
-        margin-left: 4px;
-        margin-right: 6px;
-        padding: 0px;
-    }
-    QPushButton:hover {
-        background-color: rgba(255, 255, 255, 25);
-    }
-"""
-
-
 # Стиль для кнопки сброса сортировки
 SORT_BUTTON_QSS = f"""
     QPushButton {{

@@ -125,15 +125,16 @@ class AnalyticsEngine:
 
         first_row = pipe_df.iloc[0]
 
+        has_hazard_col = "Опасность" in pipe_df.columns
         details = {
             "Номер трубы": str(pipe_number),
             "Регион": first_row.get("Регион", "Нет данных"),
             "Год обследования": first_row.get("Год обследования"),
             "Всего дефектов": len(pipe_df),
             "Макс. глубина, %": pipe_df["Глубина, %"].max(),
-            "Класс (a)": len(pipe_df[pipe_df["Опасность"] == "(a)"]),
-            "Класс (b)": len(pipe_df[pipe_df["Опасность"] == "(b)"]),
-            "Класс (c)": len(pipe_df[pipe_df["Опасность"] == "(c)"]),
+            "Класс (a)": len(pipe_df[pipe_df["Опасность"] == "(a)"]) if has_hazard_col else 0,
+            "Класс (b)": len(pipe_df[pipe_df["Опасность"] == "(b)"]) if has_hazard_col else 0,
+            "Класс (c)": len(pipe_df[pipe_df["Опасность"] == "(c)"]) if has_hazard_col else 0,
         }
 
         if "Длина трубы, м" in pipe_df.columns:

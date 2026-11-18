@@ -29,8 +29,10 @@ class TableManager:
         tab_summary_widget, self.table_summary = self._create_table_widget()
         self.tabs.addTab(tab_summary_widget, "Сводка по трубам")
 
-        for i in range(2):
-            self.tabs.tabBar().setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
+        tab_bar = self.tabs.tabBar()
+        if tab_bar is not None:
+            for i in range(2):
+                tab_bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
 
     # Создает контейнер с таблицей
     def _create_table_widget(self) -> tuple[QWidget, DataTable]:
@@ -50,6 +52,9 @@ class TableManager:
 
     # Настраивает конкретную базовую таблицу
     def _setup_base_table(self, mode: int, table: DataTable, proxy_attr: str, source_attr: str):
+        if self.engine is None:
+            return
+
         display = self.engine.get_table_data(mode=mode)
         visible_cols_count = 6 if mode == 0 else 5
 
@@ -77,14 +82,16 @@ class TableManager:
             header.setStretchLastSection(False)
             header.setSectionResizeMode(header.ResizeMode.Stretch)
 
-        try:
-            table.selectionModel().selectionChanged.disconnect()
-        except TypeError:
-            pass
+        sel_model = table.selectionModel()
+        if sel_model is not None:
+            try:
+                sel_model.selectionChanged.disconnect()
+            except TypeError:
+                pass
 
-        table.selectionModel().selectionChanged.connect(
-            lambda sel, des, p=proxy_model, m=mode: self._on_row_selected(sel, p, m)
-        )
+            sel_model.selectionChanged.connect(
+                lambda sel, des, p=proxy_model, m=mode: self._on_row_selected(sel, p, m)
+            )
 
         if proxy_model.rowCount() > 0:
             table.selectRow(0)
@@ -104,7 +111,7 @@ class TableManager:
 
         if isinstance(model, PandasModel):
             data = model.get_row_dict(row)
-            if mode == 1:
+            if mode == 1 and self.engine is not None:
                 pipe_num = data.get("Номер трубы")
                 if pipe_num and pipe_num != "Нет данных":
                     pipe_data = self.engine.get_pipe_details(str(pipe_num))
@@ -146,9 +153,11 @@ class TableManager:
             header.setStretchLastSection(False)
             header.setSectionResizeMode(header.ResizeMode.Stretch)
 
-        table.selectionModel().selectionChanged.connect(
-            lambda sel, des, p=proxy_model: self._on_custom_row_selected(sel, p)
-        )
+        sel_model = table.selectionModel()
+        if sel_model is not None:
+            sel_model.selectionChanged.connect(
+                lambda sel, des, p=proxy_model: self._on_custom_row_selected(sel, p)
+            )
 
         if proxy_model.rowCount() > 0:
             table.selectRow(0)
@@ -165,12 +174,13 @@ class TableManager:
         close_btn = TabCloseButton()
         close_btn.clicked.connect(lambda: self.close_tab(new_index))
 
-        self.tabs.tabBar().setTabButton(
-            new_index, QTabBar.ButtonPosition.RightSide, close_btn
-        )
+        tab_bar = self.tabs.tabBar()
+        if tab_bar is not None:
+            tab_bar.setTabButton(
+                new_index, QTabBar.ButtonPosition.RightSide, close_btn
+            )
 
         self.tabs.setCurrentIndex(new_index)
-
 
     # Обработчик выбора строки в кастомной таблице
     def _on_custom_row_selected(self, selected, proxy_model):

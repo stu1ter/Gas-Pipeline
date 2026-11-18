@@ -1,20 +1,22 @@
 # type: ignore
 from typing import ClassVar
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFrame,
     QHeaderView,
     QLabel,
+    QPushButton,
     QScrollArea,
     QTableView,
     QVBoxLayout,
     QWidget,
 )
 
-from .theme import DETAIL_CARD_QSS, TABLE_QSS, Palette, kpi_card_qss
+from .theme import CLOSE_BUTTON_QSS, DETAIL_CARD_QSS, TABLE_QSS, Palette, kpi_card_qss
 
 
 # Виджет ключевого показателя
@@ -107,7 +109,7 @@ class DetailCard(QFrame):
 
         self.clear()
 
-    #Полностью очищает layout
+    # Полностью очищает layout
     def _clear_content(self):
         while self.content_layout.count():
             item = self.content_layout.takeAt(0)
@@ -178,7 +180,6 @@ class DetailCard(QFrame):
             self.content_layout.addWidget(row_widget)
 
 # Виджет таблицы данных
-#
 class DataTable(QTableView):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -197,3 +198,47 @@ class DataTable(QTableView):
         header.setStretchLastSection(False)
 
         self.setStyleSheet(TABLE_QSS)
+
+# Кнопка закрытия вкладки
+class TabCloseButton(QPushButton):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Закрыть вкладку")
+
+        self.setFixedSize(18, 18)
+        self.setStyleSheet(CLOSE_BUTTON_QSS)
+
+        self.icon_normal = self._create_icon(QColor(160, 160, 160))
+        self.icon_hover = self._create_icon(QColor(230, 230, 230))
+
+        self.setIcon(self.icon_normal)
+        self.setIconSize(QSize(14, 14))
+
+    def sizeHint(self):
+        return QSize(18, 18)
+
+    def _create_icon(self, color):
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        pen = QPen(color, 1.3)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+
+        painter.drawLine(4, 4, 12, 12)
+        painter.drawLine(4, 12, 12, 4)
+
+        painter.end()
+        return QIcon(pixmap)
+
+    def enterEvent(self, event):
+        self.setIcon(self.icon_hover)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.setIcon(self.icon_normal)
+        super().leaveEvent(event)

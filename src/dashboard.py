@@ -1,34 +1,36 @@
 import pandas as pd
-from PyQt6.QtCore import QSortFilterProxyModel, Qt
+from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtWidgets import (
     QApplication,
-    QComboBox,
     QFrame,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QMainWindow,
     QPushButton,
     QSplitter,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from analytics import AnalyticsEngine
-from data import PandasModel
 from ui.charts import ChartRenderer
 from ui.overlay import LoadingOverlay
+from ui.table_manager import TableManager
 from ui.theme import (
     APPLY_BUTTON_QSS,
     EXTRA_GROUP_QSS,
     FILTER_PANEL_QSS,
-    TABLE_MODE_QSS,
+    SORT_BUTTON_QSS,
+    TAB_WIDGET_QSS,
     Palette,
 )
-from ui.widgets import DataTable, DetailCard, KpiCard, make_filter_field
+from ui.widgets import DetailCard, KpiCard, make_filter_field
 
 
+# Инициализирует главное окно и загружает данные
 class DashboardWindow(QMainWindow):
+    # Инициализирует главное окно и загружает данные
     def __init__(self, full_df: pd.DataFrame):
         super().__init__()
         self.setWindowTitle("Gas Pipeline")
@@ -42,6 +44,7 @@ class DashboardWindow(QMainWindow):
         self._init_ui()
         self._load_initial_filters()
 
+    # Собирает основной каркас интерфейса
     def _init_ui(self):
         central = QWidget()
         central.setStyleSheet(f"background-color: {Palette.BG};")
@@ -56,7 +59,7 @@ class DashboardWindow(QMainWindow):
 
         self._overlay = LoadingOverlay(central, "Загрузка данных…")
 
-    # Верхняя панель
+    # Создает панель с фильтрами
     def _build_filters(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("FilterPanel")
@@ -68,8 +71,35 @@ class DashboardWindow(QMainWindow):
 
         filters_row = QHBoxLayout()
         filters_row.setSpacing(16)
-        filters_row.addWidget(self._build_main_group())
-        filters_row.addWidget(self._build_extra_group())
+
+        main_group = QWidget()
+        main_lay = QHBoxLayout(main_group)
+        main_lay.setContentsMargins(0, 0, 0, 0)
+        main_lay.setSpacing(12)
+
+        self.combo_region, region_w = make_filter_field("Участок", 240)
+        self.combo_region.currentIndexChanged.connect(self._on_region_changed)
+        main_lay.addWidget(region_w)
+
+        self.combo_year, year_w = make_filter_field("Год", 100)
+        main_lay.addWidget(year_w)
+
+        filters_row.addWidget(main_group)
+
+        extra_group = QFrame()
+        extra_group.setObjectName("ExtraGroup")
+        extra_group.setStyleSheet(EXTRA_GROUP_QSS)
+        extra_lay = QHBoxLayout(extra_group)
+        extra_lay.setContentsMargins(12, 8, 12, 10)
+        extra_lay.setSpacing(12)
+
+        self.combo_loc, loc_w = make_filter_field("Расположение", 180)
+        extra_lay.addWidget(loc_w)
+
+        self.combo_haz, haz_w = make_filter_field("Опасность", 100)
+        extra_lay.addWidget(haz_w)
+
+        filters_row.addWidget(extra_group)
         filters_row.addStretch()
 
         outer.addLayout(filters_row)
@@ -77,41 +107,7 @@ class DashboardWindow(QMainWindow):
 
         return panel
 
-    # Основные фильтры
-    def _build_main_group(self) -> QWidget:
-        w = QWidget()
-        lay = QHBoxLayout(w)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(12)
-
-        self.combo_region, region_w = make_filter_field("Участок", 240)
-        self.combo_region.currentIndexChanged.connect(self._on_region_changed)
-        lay.addWidget(region_w)
-
-        self.combo_year, year_w = make_filter_field("Год", 100)
-        lay.addWidget(year_w)
-
-        return w
-
-    # Дополнительные фильтры
-    def _build_extra_group(self) -> QFrame:
-        w = QFrame()
-        w.setObjectName("ExtraGroup")
-        w.setStyleSheet(EXTRA_GROUP_QSS)
-
-        lay = QHBoxLayout(w)
-        lay.setContentsMargins(12, 8, 12, 10)
-        lay.setSpacing(12)
-
-        self.combo_loc, loc_w = make_filter_field("Расположение", 180)
-        lay.addWidget(loc_w)
-
-        self.combo_haz, haz_w = make_filter_field("Опасность", 100)
-        lay.addWidget(haz_w)
-
-        return w
-
-    # Кнопака Применить фильтры
+    # Создает кнопку применения фильтров
     def _build_apply_button(self) -> QVBoxLayout:
         btn_box = QVBoxLayout()
         btn_box.setContentsMargins(0, 16, 0, 0)
@@ -128,7 +124,7 @@ class DashboardWindow(QMainWindow):
 
         return btn_box
 
-    # Панель с ключевыми показателями
+    # Создает панель с KPI-карточками
     def _build_kpi_row(self) -> QHBoxLayout:
         row = QHBoxLayout()
         row.setSpacing(12)
@@ -136,12 +132,11 @@ class DashboardWindow(QMainWindow):
         self.kpi_replacement = KpiCard("Требуют замены", Palette.KPI_ORANGE)
         self.kpi_max = KpiCard("Макс. глубина", Palette.KPI_RED)
         self.kpi_unique = KpiCard("Уникальных типов", Palette.KPI_PURPLE)
-        for card in (self.kpi_total, self.kpi_replacement,
-                     self.kpi_max, self.kpi_unique):
+        for card in (self.kpi_total, self.kpi_replacement, self.kpi_max, self.kpi_unique):
             row.addWidget(card)
         return row
 
-    # Вертикальный разделитель
+    # Создает вертикальный разделитель для графиков и таблиц
     def _build_splitter(self) -> QSplitter:
         splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.setChildrenCollapsible(False)
@@ -150,7 +145,7 @@ class DashboardWindow(QMainWindow):
         splitter.setSizes([350, 400])
         return splitter
 
-    # Внедрение графиков
+    # Создает контейнер для графиков
     def _build_charts(self) -> QWidget:
         w = QWidget()
         w.setMinimumHeight(280)
@@ -158,71 +153,55 @@ class DashboardWindow(QMainWindow):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
 
-        self.chart_renderer = ChartRenderer()
+        self.chart_renderer = ChartRenderer(
+            on_defect_clicked=self._on_chart_defect_clicked,
+            on_class_clicked=self._on_chart_class_clicked
+        )
 
         for canvas in self.chart_renderer.get_canvases():
             lay.addWidget(canvas)
 
         return w
 
-    # Сборка блока с таблицец
+    # Создает контейнер для таблиц и карточки деталей
     def _build_table(self) -> QWidget:
         w = QWidget()
         outer_lay = QHBoxLayout(w)
         outer_lay.setContentsMargins(0, 4, 0, 0)
         outer_lay.setSpacing(12)
 
-        table_container = QWidget()
-        table_lay = QVBoxLayout(table_container)
-        table_lay.setContentsMargins(0, 0, 0, 0)
-        table_lay.setSpacing(8)
-
-        header_lay = QHBoxLayout()
-
-        # 1. Заменили QLabel на QPushButton
-        self.btn_reset_sort = QPushButton("Сортировка по умолчанию")
-        self.btn_reset_sort.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_reset_sort.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Palette.PANEL_ALT};
-                color: {Palette.TEXT};
-                border: 1px solid {Palette.BORDER};
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-size: 12px;
-            }}
-            QPushButton:hover {{
-                border-color: {Palette.ACCENT};
-            }}
-        """)
-        self.btn_reset_sort.clicked.connect(self._reset_sorting)
-        header_lay.addWidget(self.btn_reset_sort)
-
-        header_lay.addStretch()
-
-        self.combo_label = QLabel("Выберите таблицу:")
-        self.combo_label.setStyleSheet(f"font-size: 12px; color: {Palette.TEXT_DIM};")
-        header_lay.addWidget(self.combo_label)
-
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Все аномалии", "Сводка по трубам"])
-        self.mode_combo.setStyleSheet(TABLE_MODE_QSS)
-        self.mode_combo.currentIndexChanged.connect(self._refresh_table)
-        header_lay.addWidget(self.mode_combo)
-
-        table_lay.addLayout(header_lay)
-
-        self.table = DataTable()
-        table_lay.addWidget(self.table)
-
-        outer_lay.addWidget(table_container, stretch=4)
-
         self.detail_card = DetailCard()
         outer_lay.addWidget(self.detail_card, stretch=1)
 
+        self.table_tabs = QTabWidget()
+        self.table_tabs.setStyleSheet(TAB_WIDGET_QSS)
+        self.table_tabs.setTabsClosable(True)
+        self.table_tabs.setMovable(False)
+
+        self.table_manager = TableManager(self.table_tabs, self.detail_card)
+        self.table_manager.setup_base_tabs()
+
+        self.table_tabs.tabCloseRequested.connect(self.table_manager.close_tab)
+        tab_bar = self.table_tabs.tabBar()
+
+        if tab_bar is not None:
+            tab_bar.installEventFilter(self)
+        self.table_tabs.currentChanged.connect(self._on_tab_changed)
+
+        self.table_tabs.currentChanged.connect(self._on_tab_changed)
+
+        self.btn_reset_sort = QPushButton("Сортировка по умолчанию")
+        self.btn_reset_sort.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reset_sort.setStyleSheet(SORT_BUTTON_QSS)
+        self.btn_reset_sort.clicked.connect(
+            lambda: self.table_manager.reset_sorting(self.table_tabs.currentIndex())
+        )
+        self.table_tabs.setCornerWidget(self.btn_reset_sort, Qt.Corner.TopRightCorner)
+
+        outer_lay.insertWidget(0, self.table_tabs, stretch=4)
         return w
 
-    # Загрузка начальных фильтров
+    # Заполняет начальные значения фильтров
     def _load_initial_filters(self):
         regions = sorted(self.full_df["Регион"].dropna().unique())
         self.combo_region.blockSignals(True)
@@ -233,12 +212,12 @@ class DashboardWindow(QMainWindow):
         self._on_region_changed()
         self.update_dashboard()
 
-    # Обновление годов при изменении регион
+    # Обновляет список годов при смене региона
     def _on_region_changed(self):
         region = self.combo_region.currentText()
         df_region = self.full_df.loc[self.full_df["Регион"] == region]
         years = sorted(
-            str(int(y)) for y in df_region["Год обследования"].dropna().unique() # type: ignore
+            str(int(y)) for y in df_region["Год обследования"].dropna().unique()
         )
 
         self.combo_year.blockSignals(True)
@@ -248,7 +227,7 @@ class DashboardWindow(QMainWindow):
 
         self._update_other_filters(df_region)
 
-    # Обновление остальных фильтров при изменении региона
+    # Обновляет списки расположений и классов опасности
     def _update_other_filters(self, df: pd.DataFrame):
         self.combo_loc.blockSignals(True)
         self.combo_haz.blockSignals(True)
@@ -260,17 +239,14 @@ class DashboardWindow(QMainWindow):
 
         self.combo_haz.clear()
         self.combo_haz.addItem("Все", "Все")
-        valid = [
-            h for h in df["Опасность"].dropna().unique()
-            if h in ["(a)", "(b)", "(c)"]
-        ]
+        valid = [h for h in df["Опасность"].dropna().unique() if h in ["(a)", "(b)", "(c)"]]
         for haz in sorted(valid):
             self.combo_haz.addItem(haz, haz)
 
         self.combo_loc.blockSignals(False)
         self.combo_haz.blockSignals(False)
 
-    # Триггер при нажатии на кнопку
+    # Обновляет весь дашборд с отображением оверлея загрузки
     def update_dashboard(self):
         if self._is_updating:
             return
@@ -293,7 +269,7 @@ class DashboardWindow(QMainWindow):
             self.btn_apply.setEnabled(True)
             self._is_updating = False
 
-    # Пересчитывает данные при обновлении фильтров
+    # Выполняет фильтрацию данных и обновление всех компонентов
     def _perform_update(self):
         region = self.combo_region.currentText()
         year_str = self.combo_year.currentText()
@@ -302,8 +278,7 @@ class DashboardWindow(QMainWindow):
 
         year = float(year_str)
         df_geo = self.full_df[
-            (self.full_df["Регион"] == region)
-            & (self.full_df["Год обследования"] == year)
+            (self.full_df["Регион"] == region) & (self.full_df["Год обследования"] == year)
         ]
 
         filters = {
@@ -315,13 +290,16 @@ class DashboardWindow(QMainWindow):
         self.current_df = self.engine.filter_data(filters)
         self.engine.df = self.current_df
 
+        while self.table_tabs.count() > 2:
+            self.table_tabs.removeTab(2)
+        self.table_manager.custom_tables.clear()
+        self.table_tabs.setCurrentIndex(0)
+
         self._refresh_kpi()
-
         self.chart_renderer.redraw_all(self.engine, self.current_df)
+        self.table_manager.update_tables(self.engine)
 
-        self._refresh_table()
-
-    # Пересчитывает ключевые показатели
+    # Обновляет значения KPI-карточек
     def _refresh_kpi(self):
         k = self.engine.get_kpis()
         self.kpi_total.set_value(k["total"])
@@ -329,85 +307,68 @@ class DashboardWindow(QMainWindow):
         self.kpi_max.set_value(f"{k['max_depth']} %")
         self.kpi_unique.set_value(k["unique_defects"])
 
-    # Сброс сортировки таблицы к исходному порядку
-    def _reset_sorting(self):
-        if hasattr(self, 'proxy_model') and self.proxy_model is not None:
+    # Обрабатывает клик средней кнопкой мыши по вкладкам
+    def eventFilter(self, obj, event):
+        tab_bar = self.table_tabs.tabBar()
+        if (
+            tab_bar is not None
+            and obj == tab_bar
+            and event.type() == QEvent.Type.MouseButtonPress
+            and event.button() == Qt.MouseButton.MiddleButton
+        ):
+            index = tab_bar.tabAt(event.position().toPoint())
+            if index >= 0:
+                self.table_manager.close_tab(index)
+                return True
+        return super().eventFilter(obj, event)
 
-            self.proxy_model.sort(-1)
+    # Обновляет карточку деталей при переключении вкладок
+    def _on_tab_changed(self, index):
+        if index == 0:
+            table = self.table_manager.table_all
+            proxy = self.table_manager.proxy_all
+            sel_model = table.selectionModel()
+            if sel_model is not None and sel_model.hasSelection():
+                self.table_manager._on_row_selected(
+                    sel_model.selection(), proxy, mode=0
+                )
+            else:
+                self.detail_card.clear()
 
-            if self.proxy_model.rowCount() > 0:
-                self.table.selectRow(0)
+        elif index == 1:
+            table = self.table_manager.table_summary
+            proxy = self.table_manager.proxy_summary
+            sel_model = table.selectionModel()
+            if sel_model is not None and sel_model.hasSelection():
+                self.table_manager._on_row_selected(
+                    sel_model.selection(), proxy, mode=1
+                )
+            else:
+                self.detail_card.clear()
 
-    # Обновление таблицы
-    def _refresh_table(self, _=None):
-        selection_model = self.table.selectionModel()
-        if selection_model is not None:
-            try:
-                selection_model.selectionChanged.disconnect()
-            except TypeError:
-                pass
-
-        mode = self.mode_combo.currentIndex()
-        if mode == 0:
-            display = self.engine.get_table_data(mode=0)
-            visible_cols_count = 6
         else:
-            display = self.engine.get_table_data(mode=1)
-            visible_cols_count = 5
+            custom_idx = index - 2
+            if custom_idx < len(self.table_manager.custom_tables):
+                tab_data = self.table_manager.custom_tables[custom_idx]
+                table = tab_data['table']
+                proxy = tab_data['proxy']
+                sel_model = table.selectionModel()
+                if sel_model is not None and sel_model.hasSelection():
+                    self.table_manager._on_custom_row_selected(
+                        sel_model.selection(), proxy
+                    )
+                else:
+                    self.detail_card.clear()
 
-        if display.empty:
-            self.table.setModel(PandasModel(pd.DataFrame(columns=["Нет данных"])))
-            self.detail_card.clear()
+    # Создает вкладку с отфильтрованными данными по типу дефекта
+    def _on_chart_defect_clicked(self, label):
+        if label == "Другие":
             return
+        filtered_df = self.current_df[self.current_df["Характер особенности"] == label]
+        self.table_manager.create_filtered_tab(label, filtered_df, self.engine)
 
-        source_model = PandasModel(display)
-        self.proxy_model = QSortFilterProxyModel(self)
-        self.proxy_model.setSourceModel(source_model)
-        self.proxy_model.setSortRole(Qt.ItemDataRole.UserRole)
-
-        self.table.setModel(self.proxy_model)
-
-        for i in range(len(display.columns)):
-            self.table.setColumnHidden(i, i >= visible_cols_count)
-
-        self.table.resizeColumnsToContents()
-
-        header = self.table.horizontalHeader()
-        if header is not None:
-            header.setStretchLastSection(False)
-            header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-
-        new_selection_model = self.table.selectionModel()
-        if new_selection_model is not None:
-            new_selection_model.selectionChanged.connect(self._on_row_selected)
-
-        if self.proxy_model.rowCount() > 0:
-            self.table.selectRow(0)
-        else:
-            self.detail_card.clear()
-
-    # Отправляет данные строки в карточку аномалии
-    def _on_row_selected(self, selected, deselected):
-        indexes = selected.indexes()
-        if not indexes:
-            self.detail_card.clear()
-            return
-
-        proxy_index = indexes[0]
-        source_index = self.proxy_model.mapToSource(proxy_index)
-        row = source_index.row()
-        model = self.proxy_model.sourceModel()
-
-        if isinstance(model, PandasModel):
-            data = model.get_row_dict(row) #type:ignore
-
-            if self.mode_combo.currentIndex() == 1:
-                pipe_num = data.get("Номер трубы")
-                if pipe_num and pipe_num != "Нет данных":
-                    pipe_data = self.engine.get_pipe_details(str(pipe_num))
-                    if pipe_data:
-                        self.detail_card.set_data(pipe_data)
-                        return
-            self.detail_card.set_data(data)
-        else:
-            self.detail_card.clear()
+    # Создает вкладку с отфильтрованными данными по классу опасности
+    def _on_chart_class_clicked(self, label):
+        tab_name = f"Класс {label}"
+        filtered_df = self.current_df[self.current_df["Опасность"] == label]
+        self.table_manager.create_filtered_tab(tab_name, filtered_df, self.engine)

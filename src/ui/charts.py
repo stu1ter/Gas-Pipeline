@@ -1,8 +1,7 @@
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib.patches import Rectangle, Wedge
 from PyQt6.QtWidgets import QWidget
 
 from .theme import Palette
@@ -12,32 +11,47 @@ class ChartRenderer:
     DARK_BG = Palette.PANEL
     SPINE = Palette.BORDER
 
-    def __init__(self):
+    def __init__(self, on_defect_clicked=None, on_class_clicked=None):
+        self.on_defect_clicked = on_defect_clicked
+        self.on_class_clicked = on_class_clicked
+
         self.fig_pie = Figure(figsize=(4, 3), dpi=100, constrained_layout=True)
         self.canvas_pie = FigureCanvas(self.fig_pie)
+        self.canvas_pie.mpl_connect('pick_event', self._on_pie_pick)
 
         self.fig_bar = Figure(figsize=(4, 3), dpi=100, constrained_layout=True)
         self.canvas_bar = FigureCanvas(self.fig_bar)
+        self.canvas_bar.mpl_connect('pick_event', self._on_bar_pick)
 
         self.fig_top = Figure(figsize=(4, 3), dpi=100, constrained_layout=True)
         self.canvas_top = FigureCanvas(self.fig_top)
 
-    # Возвращает список виджетов для вставки в интерфейс
     def get_canvases(self) -> list[QWidget]:
         return [self.canvas_pie, self.canvas_bar, self.canvas_top]
 
-    # Перерисовывает все графики на основе новых данных
+    def _on_pie_pick(self, event):
+        artist = event.artist
+        if isinstance(artist, Wedge):
+            label = getattr(artist, 'custom_label', None)
+            if label and label != 'Другие' and self.on_defect_clicked:
+                self.on_defect_clicked(label)
+
+    def _on_bar_pick(self, event):
+        artist = event.artist
+        if isinstance(artist, Rectangle):
+            label = getattr(artist, 'custom_label', None)
+            if label and self.on_class_clicked:
+                self.on_class_clicked(label)
+
     def redraw_all(self, engine, current_df: pd.DataFrame):
         self._draw_defect_types(engine)
         self._draw_danger_classes(engine)
         self._draw_distance_concentration(engine)
 
-        # Обновляем отрисовку канвасов
         self.canvas_pie.draw_idle()
         self.canvas_bar.draw_idle()
         self.canvas_top.draw_idle()
 
-    # Единый дизайн графиков
     def _theme(self, ax, title):
         ax.set_facecolor(self.DARK_BG)
         ax.figure.patch.set_facecolor(self.DARK_BG)
@@ -48,7 +62,6 @@ class ChartRenderer:
         for s in ax.spines.values():
             s.set_color(self.SPINE)
 
-    # Отрисовка круговой диаграммы
     def _draw_defect_types(self, engine):
         fig = self.fig_pie
         fig.clear()
@@ -63,19 +76,22 @@ class ChartRenderer:
             else:
                 plot_data = data
 
-            ax.pie(
+            wedges, _, _ = ax.pie(
                 plot_data, labels=[str(x) for x in plot_data.index], autopct="%1.0f%%",
                 startangle=140,
                 textprops={"fontsize": 8, "color": Palette.TEXT},
                 wedgeprops={"edgecolor": Palette.BG, "linewidth": 1},
             )
+
+            for i, wedge in enumerate(wedges):
+                wedge.set_picker(True)
+                wedge.custom_label = str(plot_data.index[i])
         else:
             ax.text(0.5, 0.5, "Нет данных", ha="center", va="center",
                     color=Palette.TEXT_DIM)
 
         self._theme(ax, "Типы дефектов")
 
-    # Отрисовка горизонтальной диаграммы классов опасности
     def _draw_danger_classes(self, engine):
         fig = self.fig_bar
         fig.clear()
@@ -103,19 +119,19 @@ class ChartRenderer:
             bars = ax.barh(labels, values, color=colors, edgecolor=Palette.BG, height=0.6)
             ax.invert_yaxis()
 
-            for bar in bars:
+            for bar, label in zip(bars, labels):
+                bar.set_picker(True)
+                bar.custom_label = label
+
                 w = bar.get_width()
                 ax.text(w + max(values)*0.02, bar.get_y() + bar.get_height() / 2,
                         f"{int(w)}", va="center", ha="left", fontsize=9,
                         color=Palette.TEXT, fontweight="bold")
 
-
             ax.set_xlim(0, max(values) * 1.15)
             ax.set_xlabel("Кол-во дефектов", fontsize=8)
-
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
-
             ax.grid(axis="x", alpha=0.15, color=Palette.TEXT)
             ax.set_axisbelow(True)
         else:

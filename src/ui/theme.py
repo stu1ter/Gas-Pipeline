@@ -149,3 +149,81 @@ OVERLAY_LABEL_QSS = f"""
         background-color: {Palette.PANEL};
     }}
 """
+
+# Стили для вкладок
+TAB_WIDGET_QSS = f"""
+    QTabWidget::pane {{
+        border: 1px solid {Palette.BORDER};
+        background-color: {Palette.PANEL};
+        border-radius: 6px;
+        margin-top: -1px;
+    }}
+    QTabWidget, QTabBar {{
+        color: {Palette.TEXT_DIM};
+    }}
+    QTabBar::tab {{
+        background-color: {Palette.PANEL_ALT};
+        color: {Palette.TEXT_DIM};
+        padding: 6px 0px 6px 12px;
+        border: 1px solid {Palette.BORDER};
+        border-bottom: none;
+        border-top-left-radius: 4px;
+        border-top-right-radius: 4px;
+        margin-right: 2px;
+    }}
+    QTabBar::tab:selected {{
+        background-color: {Palette.PANEL};
+        color: {Palette.TEXT_DIM};
+        border-bottom: 2px solid {Palette.ACCENT};
+    }}
+    QTabBar::tab:hover:!selected {{
+        background-color: {Palette.PANEL_ALT};
+        color: {Palette.TEXT};
+    }}
+"""
+
+# Стиль для кнопки закрытия вкладки
+CLOSE_BUTTON_QSS = """
+    QPushButton {
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        margin-left: 4px;
+        margin-right: 6px;
+        padding: 0px;
+    }
+    QPushButton:hover {
+        background-color: rgba(255, 255, 255, 25);
+    }
+"""
+
+
+# Стиль для кнопки сброса сортировки
+SORT_BUTTON_QSS = f"""
+    QPushButton {{
+        background-color: {Palette.PANEL_ALT};
+        color: {Palette.TEXT};
+        border: 1px solid {Palette.BORDER};
+        border-radius: 4px;
+        padding: 4px 12px;
+        font-size: 12px;
+        margin-left: 10px;
+    }}
+    QPushButton:hover {{
+        border-color: {Palette.ACCENT};
+    }}
+"""
+
+# Стиль для кнопки закрытия вкладки
+CLOSE_BUTTON_QSS = """
+    QPushButton {
+        background: transparent;
+        border: none;
+        padding: 0px;
+        margin: 0px 2px 0px 0px;
+    }
+    QPushButton:hover {
+        background-color: rgba(255, 255, 255, 40);
+        border-radius: 4px;
+    }
+"""
